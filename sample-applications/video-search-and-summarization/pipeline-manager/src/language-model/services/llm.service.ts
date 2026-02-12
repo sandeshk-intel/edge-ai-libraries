@@ -65,12 +65,15 @@ export class LlmService {
     const accessKey = ['openai', 'llmSummarization', 'defaults'].join('.');
     const params: CompletionQueryParams = {};
 
-    if (this.$config.get(`${accessKey}.doSample`) !== null) {
-      params.do_sample = this.$config.get(`${accessKey}.doSample`)!;
-    }
-    if (this.$config.get(`${accessKey}.seed`) !== null) {
-      params.seed = +this.$config.get(`${accessKey}.seed`)!;
-    }
+    // Note: do_sample and seed are not supported/have issues with vLLM and have been removed
+    // The seed parameter can cause "CPU Generator does not use offset" errors in certain vLLM configurations
+
+    // if (this.$config.get(`${accessKey}.doSample`) !== null) {
+    //   params.do_sample = this.$config.get(`${accessKey}.doSample`)!;
+    // }
+    // if (this.$config.get(`${accessKey}.seed`) !== null) {
+    //   params.seed = +this.$config.get(`${accessKey}.seed`)!;
+    // }
     if (this.$config.get(`${accessKey}.temperature`) !== null) {
       params.temperature = +this.$config.get(`${accessKey}.temperature`)!;
     }

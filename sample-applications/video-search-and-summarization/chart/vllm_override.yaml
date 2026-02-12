@@ -1,0 +1,11 @@
+videoSummaryManager:
+  env:
+    USE_OVMS: "CONFIG_OFF"
+
+# Enable external vLLM service connection
+externalVllm:
+  enabled: true
+  serviceName: "qwen-vl-cpu-vllm-service"
+  namespace: "default"
+  port: 80
+  apiPath: "/v1"

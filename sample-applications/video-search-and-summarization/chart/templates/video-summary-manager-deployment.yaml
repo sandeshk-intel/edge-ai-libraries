@@ -50,6 +50,27 @@ spec:
               done
               echo "OVMS service is ready!"
         {{- end }}
+        {{- if .Values.externalVllm.enabled }}
+        - name: wait-for-external-vllm
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for external vLLM service to be ready..."
+              RETRIES=0
+              MAX_RETRIES=120
+              until [ $RETRIES -ge $MAX_RETRIES ] || curl -s -f -m 10 http://{{ .Values.externalVllm.serviceName }}.{{ .Values.externalVllm.namespace }}.svc.cluster.local:{{ .Values.externalVllm.port }}/health; do
+                RETRIES=$((RETRIES+1))
+                echo "External vLLM service is not ready yet, waiting... (Attempt $RETRIES of $MAX_RETRIES) on {{ .Values.externalVllm.serviceName }}.{{ .Values.externalVllm.namespace }}.svc.cluster.local:{{ .Values.externalVllm.port }}/health"
+                if [ $RETRIES -ge $MAX_RETRIES ]; then
+                  echo "External vLLM service health check failed after $MAX_RETRIES attempts"
+                  exit 1
+                fi
+                sleep 10
+              done
+              echo "External vLLM service is ready!"
+        {{- end }}
         {{- if .Values.vlminference.enabled }}
         - name: wait-for-vlm
           image: curlimages/curl:latest
@@ -73,7 +94,7 @@ spec:
               name: {{ .Values.videoSummaryManager.containerPortName }}
           env:
             - name: no_proxy
-              value: "{{ .Values.global.proxy.no_proxy }},audioanalyzer,vlm-inference-microservice,multimodal-embedding-ms,vdms-dataprep,vdms-vectordb,videosearch,videosummarybackend,videoingestion,minio-server,postgresql,video-summary-nginx,ovms,rabbitmq,"
+              value: "{{ .Values.global.proxy.no_proxy }},audioanalyzer,vlm-inference-microservice,multimodal-embedding-ms,vdms-dataprep,vdms-vectordb,videosearch,videosummarybackend,videoingestion,minio-server,postgresql,video-summary-nginx,ovms,{{ .Values.externalVllm.serviceName }},{{ .Values.externalVllm.serviceName }}.{{ .Values.externalVllm.namespace }}.svc.cluster.local,rabbitmq,"
             - name: http_proxy
               value: "{{ .Values.global.proxy.http_proxy }}"
             - name: https_proxy
@@ -81,7 +102,7 @@ spec:
             - name: MINIO_PROTOCOL
               value: {{ .Values.videoSummaryManager.minioProtocol | quote }}
             - name: MINIO_HOST
-              value: {{ include "minioserver.name" .Subcharts.minioserver }}
+              value: {{ include "minioserver.name" .Subcharts.minioserver }}.{{ .Release.Namespace }}.svc.cluster.local
             - name: MINIO_PORT
               value: {{ .Values.minioserver.service.apiPort | quote }}
             - name: MINIO_ROOT_USER
@@ -109,17 +130,15 @@ spec:
             - name: LLM_SUMMARIZATION_KEY
               value: "{{ .Values.videoSummaryManager.env.LLM_SUMMARIZATION_KEY }}"
             - name: LLM_SUMMARIZATION_API
-              value: {{ if .Values.ovms.enabled }}{{ printf "http://%s:8300/v3" .Values.ovms.name | quote }}{{ else }}{{ .Values.videoSummaryManager.env.LLM_SUMMARIZATION_API | default (printf "http://%s:8000/v1" .Values.vlminference.name) | quote }}{{ end }}
+              value: {{ if .Values.ovms.enabled }}{{ printf "http://%s:8300/v3" .Values.ovms.name | quote }}{{ else if .Values.externalVllm.enabled }}{{ printf "http://%s.%s.svc.cluster.local:%d%s" .Values.externalVllm.serviceName .Values.externalVllm.namespace (.Values.externalVllm.port | int) .Values.externalVllm.apiPath | quote }}{{ else }}{{ .Values.videoSummaryManager.env.LLM_SUMMARIZATION_API | default (printf "http://%s:8000/v1" .Values.vlminference.name) | quote }}{{ end }}
             - name: LLM_SUMMARIZATION_DEVICE
-              value: "{{ if .Values.global.gpu.ovmsEnabled }}GPU{{ else }}{{ .Values.videoSummaryManager.env.LLM_SUMMARIZATION_DEVICE }}{{ end }}"
+              value: "{{ if or .Values.global.gpu.ovmsEnabled .Values.externalVllm.enabled }}GPU{{ else }}{{ .Values.videoSummaryManager.env.LLM_SUMMARIZATION_DEVICE }}{{ end }}"
             - name: LLM_MODEL_NAME
               value: {{ .Values.global.llmName | quote }}
             - name: VLM_CAPTIONING_KEY
               value: "{{ .Values.videoSummaryManager.env.VLM_CAPTIONING_KEY }}"
             - name: VLM_CAPTIONING_API
-              value: "http://{{ .Values.vlminference.name }}:8000/v1"
-            - name: VLM_CAPTIONING_DEVICE
-              value: "{{ if .Values.global.gpu.vlminferenceEnabled }}GPU{{ else }}{{ .Values.videoSummaryManager.env.VLM_CAPTIONING_DEVICE }}{{ end }}"
+              value: {{ if .Values.externalVllm.enabled }}{{ printf "http://%s.%s.svc.cluster.local:%d%s" .Values.externalVllm.serviceName .Values.externalVllm.namespace (.Values.externalVllm.port | int) .Values.externalVllm.apiPath | quote }}{{ else }}{{ .Values.videoSummaryManager.env.VLM_CAPTIONING_API | default (printf "http://%s:8000/v1" .Values.vlminference.name) | quote }}{{ end }}
             - name: VLM_MODEL_NAME
               value: {{ required "Value for `.global.vlmName` is required!" .Values.global.vlmName | quote }}
             - name: LLM_CONCURRENT

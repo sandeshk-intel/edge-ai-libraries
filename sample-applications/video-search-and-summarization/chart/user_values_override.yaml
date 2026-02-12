@@ -57,6 +57,10 @@ global:
     # Set value to `GPU` to deploy on GPU
     device:
 
+# Disable VLM Inference Microservice
+vlminference:
+  enabled: false
+
 videoingestion:
   # odModelName defines the name of Object Detection Model
   odModelName: ""

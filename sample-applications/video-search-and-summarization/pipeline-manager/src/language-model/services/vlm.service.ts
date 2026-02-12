@@ -52,12 +52,9 @@ export class VlmService {
     const accessKey = ['openai', 'vlmCaptioning', 'defaults'].join('.');
     const params: CompletionQueryParams = {};
 
-    if (this.$config.get(`${accessKey}.doSample`) !== null) {
-      params.do_sample = this.$config.get(`${accessKey}.doSample`)!;
-    }
-    if (this.$config.get(`${accessKey}.seed`) !== null) {
-      params.seed = +this.$config.get(`${accessKey}.seed`)!;
-    }
+    // Note: do_sample and seed are not supported/have issues with vLLM and have been removed
+    // The seed parameter can cause "CPU Generator does not use offset" errors in certain vLLM configurations
+
     if (this.$config.get(`${accessKey}.temperature`)) {
       params.temperature = +this.$config.get(`${accessKey}.temperature`)!;
     }
@@ -180,24 +177,11 @@ export class VlmService {
       this.$inferenceCount.incrementVlmProcessCount();
       console.log(userQuery, imageUri);
 
-      let content: any[];
-
-      if (imageUri.length === 1) {
-        // Single image case
-        content = [
-          {
-            type: 'image_url',
-            image_url: { url: imageUri[0] },
-          },
-        ];
-      } else {
-        content = [
-          {
-            type: 'video',
-            video: imageUri.map((url) => url),
-          },
-        ];
-      }
+      // Map each image URI to a separate image_url content part
+      const content: any[] = imageUri.map((url) => ({
+        type: 'image_url',
+        image_url: { url },
+      }));
 
       const messages: any[] = [
         {
@@ -207,12 +191,13 @@ export class VlmService {
         },
       ];
 
-      const completions = await this.client.chat.completions.create({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const requestPayload = {
         messages,
         model: this.model,
         ...this.defaultParams(),
-      });
+      };
+
+      const completions = await this.client.chat.completions.create(requestPayload);
 
       let result: string | null = null;
 
