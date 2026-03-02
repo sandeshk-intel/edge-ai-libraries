@@ -22,7 +22,13 @@ rabbitmq:
     managementPort: 15672
     mqttPort: 1883
     
-resources: {}
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
 nodeSelector: {}
 tolerations: []
 affinity: {}

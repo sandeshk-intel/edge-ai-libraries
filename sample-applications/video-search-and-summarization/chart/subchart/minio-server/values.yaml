@@ -38,3 +38,11 @@ securityContext:
   fsGroup: 1000
   runAsUser: 1000
   runAsGroup: 1000
+
+resources:
+  requests:
+    cpu: "0.5"
+    memory: "1Gi"
+  limits:
+    cpu: "1"
+    memory: "2Gi"

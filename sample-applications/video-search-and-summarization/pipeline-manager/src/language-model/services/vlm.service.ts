@@ -12,6 +12,7 @@ import { TemplateService } from './template.service';
 import { ModelInfo } from 'src/state-manager/models/state.model';
 import { OpenaiHelperService } from './openai-helper.service';
 import { FeaturesService } from 'src/features/features.service';
+import { CONFIG_STATE } from 'src/features/features.model';
 import { InferenceCountService } from './inference-count.service';
 
 interface ImageCompletionParams extends CompletionQueryParams {
@@ -51,6 +52,17 @@ export class VlmService {
   private defaultParams(): CompletionQueryParams {
     const accessKey = ['openai', 'vlmCaptioning', 'defaults'].join('.');
     const params: CompletionQueryParams = {};
+    const isOvms = this.$config.get('openai.useOVMS') === CONFIG_STATE.ON;
+
+    // For do_sample and seed parameters:
+    if (isOvms) {
+      if (this.$config.get(`${accessKey}.doSample`) !== null) {
+        params.do_sample = this.$config.get(`${accessKey}.doSample`)!;
+      }
+      if (this.$config.get(`${accessKey}.seed`) !== null) {
+        params.seed = +this.$config.get(`${accessKey}.seed`)!;
+      }
+    }
 
     // Note: do_sample and seed are not supported/have issues with vLLM and have been removed
     // The seed parameter can cause "CPU Generator does not use offset" errors in certain vLLM configurations
@@ -176,12 +188,17 @@ export class VlmService {
     try {
       this.$inferenceCount.incrementVlmProcessCount();
       console.log(userQuery, imageUri);
+      const isOvms = this.$config.get('openai.useOVMS') === CONFIG_STATE.ON;
 
-      // Map each image URI to a separate image_url content part
-      const content: any[] = imageUri.map((url) => ({
-        type: 'image_url',
-        image_url: { url },
-      }));
+      const content: any[] = isOvms
+        ? (imageUri.length === 1
+            ? [{ type: 'image_url', image_url: { url: imageUri[0] } }]
+            : [{ type: 'video', video: imageUri.map((url) => url) }]
+          )
+        : imageUri.map((url) => ({
+            type: 'image_url',
+            image_url: { url },
+          }));
 
       const messages: any[] = [
         {

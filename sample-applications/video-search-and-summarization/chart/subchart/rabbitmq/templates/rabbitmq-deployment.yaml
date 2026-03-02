@@ -45,7 +45,7 @@ spec:
               mountPath: /etc/rabbitmq/rabbitmq.conf
               subPath: rabbitmq.conf
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml .Values.rabbitmq.resources | nindent 12 }}
       nodeSelector:
         {{- toYaml .Values.nodeSelector | nindent 8 }}
       tolerations:

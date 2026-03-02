@@ -183,6 +183,10 @@ spec:
             {{- end }}
             - name: USE_OVMS
               value: "{{ .Values.videoSummaryManager.env.USE_OVMS }}"
+          {{- with .Values.videoSummaryManager.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
       nodeSelector:
         {{- toYaml .Values.videoSummaryManager.nodeSelector | nindent 8 }}
       affinity:

@@ -28,6 +28,13 @@ audioanalyzer:
     repository: intel/audio-analyzer
     tag: "1.3.1"
     pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "4"
+      memory: "4Gi"
+    limits:
+      cpu: "6"
+      memory: "8Gi"
   env:
     DEBUG: "false"
     DEFAULT_DEVICE: "cpu"
@@ -50,6 +57,13 @@ minioServer:
     type: ClusterIP
     port: 9000
     targetPort: 9000
+  resources:
+    requests:
+      cpu: "1"
+      memory: "4Gi"
+    limits:
+      cpu: "2"
+      memory: "8Gi"
 
 
 livenessProbe:
