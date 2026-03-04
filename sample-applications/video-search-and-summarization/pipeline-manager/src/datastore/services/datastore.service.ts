@@ -32,20 +32,24 @@ export class DatastoreService {
     const port: number = this.$config.get('datastore.port')!;
     const accessKey: string = this.$config.get('datastore.accessKey')!;
     const secretKey: string = this.$config.get('datastore.secretKey')!;
+    const protocol: string = this.$config.get('datastore.protocol') ?? 'http:';
+    const useSSL: boolean = protocol === 'https:';
 
     this.client = new Client({
       endPoint,
       port,
       accessKey,
       secretKey,
-      useSSL: false,
+      useSSL,
+      region: process.env.AWS_REGION,
     });
 
     const bucketExists = await this.client.bucketExists(this.bucket);
 
     if (!bucketExists) {
-      await this.client.makeBucket(this.bucket);
+      await this.client.makeBucket(this.bucket, process.env.AWS_REGION ?? 'us-east-1');
 
+      const vpcId = process.env.AWS_VPC_ID;
       const policy = {
         Version: '2012-10-17',
         Statement: [
@@ -54,6 +58,7 @@ export class DatastoreService {
             Principal: '*',
             Action: ['s3:GetObject'],
             Resource: [`arn:aws:s3:::${this.bucket}/*`],
+            ...(vpcId && { Condition: { StringEquals: { 'aws:SourceVpc': vpcId } } }),
           },
         ],
       };
