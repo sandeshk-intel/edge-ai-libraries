@@ -292,6 +292,22 @@ structured and time-series data.
   classification tasks, optimized for edge and industrial use cases
   with rapid training and low-latency inference.
 
+## External Services Integration — AWS S3 and OpenSearch
+
+The [Video Search and Summarization](./sample-applications/video-search-and-summarization) application supports replacing its in-cluster backing services with AWS managed equivalents:
+
+- **AWS S3** — instead of the built-in MinIO server for video and asset storage.
+- **AWS Managed OpenSearch** — instead of the built-in VDMS Vector DB for embedding search.
+
+For full configuration instructions, prerequisites (VPC endpoints, IAM policies, security group rules), Helm values, and connectivity troubleshooting, see the **[External Services Guide (S3 & OpenSearch)](../chart/README-external-services.md)**.
+
+It covers:
+- VPC Gateway Endpoint and IAM least-privilege policy for S3
+- Per-subchart S3 endpoint overrides (`audioanalyzer`, `videoingestion`, `vdmsdataprep`)
+- `no_proxy` configuration to prevent proxy/TLS interference
+- OpenSearch VPC placement, security group rules, and authentication modes (basic auth vs IAM SigV4)
+- Helm override file layering and a connectivity checklist for both services
+
 ## Contribute
 
 To learn how to contribute to the project, see
@@ -317,3 +333,5 @@ The **Edge AI Libraries** project is licensed under the [APACHE 2.0](./LICENSE) 
 |:----------|:--------|
 | Dataset Management Framework (Datumaro) | [MIT License](https://github.com/open-edge-platform/datumaro/blob/develop/LICENSE) |
 | Intel® Geti™ | [Limited Edge Software Distribution License](https://github.com/open-edge-platform/geti/blob/main/LICENSE) |
+
+ 
