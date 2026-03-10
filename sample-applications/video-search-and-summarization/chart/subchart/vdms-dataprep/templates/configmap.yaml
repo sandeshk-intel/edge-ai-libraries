@@ -11,7 +11,18 @@ data:
   VDMS_VDB_HOST: "vdms-vectordb"
   {{- end }}
   VDMS_VDB_PORT: {{ .Values.vdmsVectorDbPort | quote }}
+  VECTOR_DB_TYPE: {{ .Values.global.vectorDbType | default "vdms" | quote }}
   DB_COLLECTION: {{ .Values.global.vdmsIndexName | quote }}
+  {{- /* OpenSearch settings */ -}}
+  {{- $osConfig := .Values.global.opensearch | default dict }}
+  OPENSEARCH_HOST: {{ $osConfig.host | default "localhost" | quote }}
+  OPENSEARCH_PORT: {{ $osConfig.port | default 9200 | quote }}
+  OPENSEARCH_INDEX: {{ $osConfig.index | default "" | quote }}
+  OPENSEARCH_USER: {{ $osConfig.user | default "" | quote }}
+  OPENSEARCH_PASSWORD: {{ $osConfig.password | default "" | quote }}
+  OPENSEARCH_USE_SSL: {{ $osConfig.useSSL | default false | quote }}
+  OPENSEARCH_VERIFY_CERTS: {{ $osConfig.verifyCerts | default false | quote }}
+  OPENSEARCH_AWS_REGION: {{ $osConfig.awsRegion | default "" | quote }}
   APP_HOST: "vdms-dataprep"
   http_proxy: {{ .Values.global.proxy.http_proxy | quote }}
   https_proxy: {{ .Values.global.proxy.https_proxy | quote }}
@@ -19,7 +30,7 @@ data:
   MINIO_ACCESS_KEY: {{ .Values.global.env.MINIO_ROOT_USER | quote }}
   MINIO_SECRET_KEY: {{ .Values.global.env.MINIO_ROOT_PASSWORD | quote }}
   MINIO_ENDPOINT: {{ .Values.minioServer.name }}:{{ .Values.minioServer.service.port }}
-  MINIO_SECURE: "false"
+  MINIO_SECURE: {{ .Values.minioServer.secure | default "false" | quote }}
   DEFAULT_BUCKET_NAME: {{ .Values.defaultBucketName | default .Values.global.env.DEFAULT_BUCKET_NAME | default "video-summary" | quote }}
   MULTIMODAL_EMBEDDING_ENDPOINT: {{ .Values.multimodalEmbeddingEndpoint | default .Values.global.env.MULTIMODAL_EMBEDDING_ENDPOINT | default "http://multimodal-embedding-ms:8000/embeddings" | quote }}
   {{- $embeddingModel := dict "value" "" }}

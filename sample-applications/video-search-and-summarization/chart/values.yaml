@@ -17,6 +17,20 @@ global:
   # vdmsIndexName is the DB Index or DB Collection name used by VDMS Vector DB.
   vdmsIndexName: ""
 
+  # vectorDbType controls the vector database backend: "vdms" (default) or "opensearch"
+  vectorDbType: "vdms"
+
+  # OpenSearch settings (used when vectorDbType is "opensearch")
+  opensearch:
+    host: "localhost"
+    port: 9200
+    index: ""           # Falls back to vdmsIndexName / DB_COLLECTION if empty
+    user: ""
+    password: ""
+    useSSL: false
+    verifyCerts: false
+    awsRegion: ""       # Set to e.g. "us-east-1" to enable AWS IAM auth
+
   # vlmName is Vision-Language Model Name used by VLM Inference Microservice
   vlmName: ""
   # llmName is Large Language Model Name used by OVMS service
@@ -138,6 +152,7 @@ videoSummaryManager:
   nodeSelector: {}
   affinity: {}
   tolerations: []
+
 
 audioanalyzer:
   enabled: false

@@ -14,6 +14,8 @@ spec:
       labels:
         app: {{ include "videosearch.name" . }}
     spec:
+      {{- $dbType := .Values.global.vectorDbType | default "vdms" }}
+      {{- if eq $dbType "vdms" }}
       initContainers:
         - name: wait-for-vdms
           image: busybox:latest
@@ -27,6 +29,24 @@ spec:
                 sleep 10
               done
               echo "VDMS VectorDB service is ready!"
+      {{- else if eq $dbType "opensearch" }}
+      initContainers:
+        - name: wait-for-opensearch
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              {{- $osConfig := .Values.global.opensearch | default dict }}
+              OS_HOST={{ $osConfig.host | default "localhost" | quote }}
+              OS_PORT={{ $osConfig.port | default 9200 }}
+              echo "Waiting for OpenSearch at ${OS_HOST}:${OS_PORT}..."
+              until nc -z ${OS_HOST} ${OS_PORT}; do
+                echo "OpenSearch is not ready yet, waiting..."
+                sleep 10
+              done
+              echo "OpenSearch is ready!"
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.videosearch.image.repository }}:{{ .Values.videosearch.image.tag }}"
@@ -45,6 +65,8 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           env:
+            - name: VECTOR_DB_TYPE
+              value: {{ .Values.global.vectorDbType | default "vdms" | quote }}
             - name: no_proxy
               value: "{{ .Values.global.proxy.no_proxy }},localhost,127.0.0.1,audioanalyzer,vlm-inference-microservice,multimodal-embedding-ms,vdms-dataprep,vdms-vectordb,videosearch,videosummarybackend,videoingestion,minio-server,postgresql,video-summary-nginx,ovms,rabbitmq,.svc.cluster.local"
             - name: no_proxy_env
@@ -115,3 +137,20 @@ spec:
               value: {{ .Values.videosearch.env.AGGREGATION_CONTEXT_SIGMA_SECONDS | quote }}
             - name: AGGREGATION_CONTEXT_BOOST_STRENGTH
               value: {{ .Values.videosearch.env.AGGREGATION_CONTEXT_BOOST_STRENGTH | quote }}
+            {{- $osConfig := .Values.global.opensearch | default dict }}
+            - name: OPENSEARCH_HOST
+              value: {{ $osConfig.host | default "localhost" | quote }}
+            - name: OPENSEARCH_PORT
+              value: {{ $osConfig.port | default 9200 | quote }}
+            - name: OPENSEARCH_INDEX
+              value: {{ $osConfig.index | default "" | quote }}
+            - name: OPENSEARCH_USER
+              value: {{ $osConfig.user | default "" | quote }}
+            - name: OPENSEARCH_PASSWORD
+              value: {{ $osConfig.password | default "" | quote }}
+            - name: OPENSEARCH_USE_SSL
+              value: {{ $osConfig.useSSL | default false | quote }}
+            - name: OPENSEARCH_VERIFY_CERTS
+              value: {{ $osConfig.verifyCerts | default false | quote }}
+            - name: OPENSEARCH_AWS_REGION
+              value: {{ $osConfig.awsRegion | default "" | quote }}
