@@ -9,7 +9,6 @@ from typing import Optional, List, Tuple, Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from langchain_community.vectorstores.vdms import VDMS
 
 from src.utils.common import logger, settings
 from src.utils.directory_watcher import (
@@ -107,10 +106,20 @@ def format_aggregated_results(aggregated_videos: list[dict]) -> list[dict]:
 @app.post("/query")
 async def query_endpoint(request: list[QueryRequest]):
     try:
-        from src.vdms_retriever.retriever import (
-            get_vectordb,
-            aggregate_frame_results_to_videos,
-        )
+        # --- Select vector DB backend based on VECTOR_DB_TYPE env -----------
+        vector_db_type = getattr(settings, "VECTOR_DB_TYPE", "vdms").lower()
+        if vector_db_type == "opensearch":
+            from src.opensearch_retriever.retriever import (
+                get_vectordb,
+                aggregate_frame_results_to_videos,
+            )
+            logger.info("Using OpenSearch vector DB backend")
+        else:
+            from src.vdms_retriever.retriever import (
+                get_vectordb,
+                aggregate_frame_results_to_videos,
+            )
+            logger.info("Using VDMS vector DB backend")
 
         api_start = time.perf_counter()
         logger.info(f"=== SEARCH API CALLED ===")
@@ -118,7 +127,7 @@ async def query_endpoint(request: list[QueryRequest]):
             f"Received request: {json.dumps([req.dict() for req in request], indent=2)}"
         )
 
-        db: VDMS = get_vectordb()
+        db = get_vectordb()
         if not db:
             logger.error(
                 "VectorDB could not be initialized. Please verify the connection."

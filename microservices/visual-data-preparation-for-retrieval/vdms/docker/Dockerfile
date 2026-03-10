@@ -54,9 +54,10 @@ RUN poetry lock --no-update
 
 # Install runtime (prod) deps. Uses $POETRY_VIRTUALENVS_IN_PROJECT to create venv.
 # If value of ARCH is cpu, install with optional cpu dependencies else install main dependencies
+# Always install opensearch extras for OpenSearch vector DB support
 RUN if [ "${ARCH}" = "cpu" ]; \
-    then poetry install --with cpu; \
-    else poetry install --only main; fi
+    then poetry install --with cpu --extras opensearch; \
+    else poetry install --only main --extras opensearch; fi
 
 # Install additional packages that have dependency conflicts with --no-deps
 # These are required for the multimodal embedding service SDK

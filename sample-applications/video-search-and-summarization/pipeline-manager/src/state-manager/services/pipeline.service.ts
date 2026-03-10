@@ -1,6 +1,6 @@
 // Copyright (C) 2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { StateService } from './state.service';
 import { DatastoreService } from 'src/datastore/services/datastore.service';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
@@ -22,6 +22,7 @@ import { LocalstoreService } from 'src/datastore/services/localstore.service';
 import { unlinkSync } from 'fs';
 import { AudioQueueService } from '../queues/audio-queue.service';
 import { AudioService } from 'src/audio/services/audio.service';
+import { VideoService } from 'src/video-upload/services/video.service';
 
 @Injectable()
 export class PipelineService {
@@ -34,12 +35,24 @@ export class PipelineService {
     private $audio: AudioService,
     private $chunking: ChunkingService,
     private $audioQueue: AudioQueueService,
+    private $video: VideoService,
   ) {}
 
   @OnEvent(PipelineEvents.CHUNKING_COMPLETE)
   async chunkingComplete(states: string[]) {
     for (const stateId of states) {
       this.$state.updateChunkingStatus(stateId, StateActionStatus.COMPLETE);
+
+      // Auto-trigger frame embeddings for video search as soon as chunking is done
+      const videoId = this.$state.fetch(stateId)?.video?.videoId;
+      if (videoId) {
+        Logger.log(`Auto-triggering frame embeddings for video ${videoId} (state ${stateId})`);
+        this.$video.createSearchEmbeddings(videoId).catch((err) =>
+          Logger.error(`Failed to create frame embeddings for video ${videoId}`, err),
+        );
+      } else {
+        Logger.warn(`CHUNKING_COMPLETE: could not resolve videoId for state ${stateId}`);
+      }
     }
   }
 

@@ -37,11 +37,24 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = ""
     MINIO_SECURE: bool = False  # Whether to use HTTPS
 
+    # Vector DB backend: "vdms" (default) or "opensearch"
+    VECTOR_DB_TYPE: str = "vdms"
+
     # VDMS and embedding settings
     VDMS_VDB_HOST: str = ""
     VDMS_VDB_PORT: str = ""
     MULTIMODAL_EMBEDDING_MODEL_NAME: str = ""  # Model name for both SDK and API modes - must be explicitly set
     MULTIMODAL_EMBEDDING_ENDPOINT: str = ""  # 0 means auto-detect from API
+
+    # OpenSearch settings (used when VECTOR_DB_TYPE="opensearch")
+    OPENSEARCH_HOST: str = "localhost"
+    OPENSEARCH_PORT: int = 9200
+    OPENSEARCH_INDEX: str = ""          # Falls back to DB_COLLECTION if empty
+    OPENSEARCH_USER: str = ""
+    OPENSEARCH_PASSWORD: str = ""
+    OPENSEARCH_USE_SSL: str = "false"
+    OPENSEARCH_VERIFY_CERTS: str = "false"
+    OPENSEARCH_AWS_REGION: str = ""     # Set for IAM auth, leave empty for basic auth
     
     # Embedding processing mode: "api" or "sdk"
     # api: Use HTTP API calls to multimodal embedding service (current default)

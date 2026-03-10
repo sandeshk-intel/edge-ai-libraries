@@ -112,47 +112,52 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        clients_to_update: list[tuple[str, object]] = []
+        vector_db_type = getattr(settings, "VECTOR_DB_TYPE", "vdms").lower()
 
-        if _client_cache:
-            for client_key, client_wrapper in _client_cache.items():
-                client = getattr(client_wrapper, "client", None)
-                if client is not None:
-                    clients_to_update.append((client_key, client))
+        if vector_db_type == "opensearch":
+            logger.info("OpenSearch backend — skipping VDMS index update on shutdown")
+        else:
+            clients_to_update: list[tuple[str, object]] = []
 
-        try:
-            from src.core.embedding.sdk_embedding_helper import _sdk_client
-        except Exception:  # pragma: no cover - defensive import guard
-            _sdk_client = None
+            if _client_cache:
+                for client_key, client_wrapper in _client_cache.items():
+                    client = getattr(client_wrapper, "client", None)
+                    if client is not None:
+                        clients_to_update.append((client_key, client))
 
-        if _sdk_client is not None:
-            sdk_client = getattr(_sdk_client, "vdms_client", None)
-            if sdk_client is not None:
-                clients_to_update.append(("sdk_client", sdk_client))
-
-        if clients_to_update:
-            logger.info("Updating VDMS index before tearing down . . .")
-
-        for client_key, client in clients_to_update:
             try:
-                vdms_utils = VDMS_Utils(client)
-                query = vdms_utils.add_descriptor_set(
-                    "FindDescriptorSet",
-                    name=settings.DB_COLLECTION,
-                    storeIndex=True,
-                )
+                from src.core.embedding.sdk_embedding_helper import _sdk_client
+            except Exception:  # pragma: no cover - defensive import guard
+                _sdk_client = None
 
-                res, _ = vdms_utils.run_vdms_query([query])
-                if res and "FailedCommand" in res[0]:
-                    raise ValueError(
-                        f"Failed to update VDMS index for collection {settings.DB_COLLECTION}."
+            if _sdk_client is not None:
+                sdk_client = getattr(_sdk_client, "vdms_client", None)
+                if sdk_client is not None:
+                    clients_to_update.append(("sdk_client", sdk_client))
+
+            if clients_to_update:
+                logger.info("Updating VDMS index before tearing down . . .")
+
+            for client_key, client in clients_to_update:
+                try:
+                    vdms_utils = VDMS_Utils(client)
+                    query = vdms_utils.add_descriptor_set(
+                        "FindDescriptorSet",
+                        name=settings.DB_COLLECTION,
+                        storeIndex=True,
                     )
 
-                logger.info(f"VDMS client '{client_key}' index updated successfully.")
-            except Exception as exc:  # pragma: no cover - best effort logging
-                logger.error(f"Error updating index for VDMS client '{client_key}': {exc}")
+                    res, _ = vdms_utils.run_vdms_query([query])
+                    if res and "FailedCommand" in res[0]:
+                        raise ValueError(
+                            f"Failed to update VDMS index for collection {settings.DB_COLLECTION}."
+                        )
 
-        logger.info("Tearing down VDMS-Dataprep Service . . .")
+                    logger.info(f"VDMS client '{client_key}' index updated successfully.")
+                except Exception as exc:  # pragma: no cover - best effort logging
+                    logger.error(f"Error updating index for VDMS client '{client_key}': {exc}")
+
+        logger.info("Tearing down DataPrep Service . . .")
 
 
 # Initialize FastAPI app

@@ -10,7 +10,10 @@ from src.utils.common import settings, logger
 from src.vdms_retriever.embedding_wrapper import EmbeddingAPI
 
 DEBUG = False
-client = VDMS_Client(settings.VDMS_VDB_HOST, settings.VDMS_VDB_PORT)
+# NOTE: VDMS client is created lazily inside get_vectordb() so that importing
+# aggregation helpers from this module (e.g. by opensearch_retriever) does NOT
+# trigger a VDMS connection attempt when VDMS is disabled.
+_vdms_client = None
 
 
 # Frame-to-Video Aggregation Configuration
@@ -632,6 +635,9 @@ def get_vectordb() -> VDMS:
     Returns:
         tuple: The vector database instance
     """
+    global _vdms_client
+    if _vdms_client is None:
+        _vdms_client = VDMS_Client(settings.VDMS_VDB_HOST, settings.VDMS_VDB_PORT)
 
     embeddings = EmbeddingAPI(
         api_url=settings.EMBEDDINGS_ENDPOINT,
@@ -641,7 +647,7 @@ def get_vectordb() -> VDMS:
     vector_dimensions = embeddings.get_embedding_length()
 
     vector_db = VDMS(
-        client=client,
+        client=_vdms_client,
         embedding=embeddings,
         collection_name=settings.INDEX_NAME,
         distance_strategy=settings.DISTANCE_STRATEGY,

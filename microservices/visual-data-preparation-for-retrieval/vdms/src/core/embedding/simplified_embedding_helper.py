@@ -12,8 +12,9 @@ from src.core.utils.metadata_utils import store_enhanced_video_metadata
 # Import SDK-based embedding helper for optimized processing
 from .sdk_embedding_helper import generate_video_embedding_sdk, get_sdk_client
 
-# Cache to store VDMS client instances for different use cases
-_client_cache: dict[str, SimpleVDMSClient] = {}
+# Cache to store client instances for different use cases
+# Supports both SimpleVDMSClient and OpenSearchStorageClient
+_client_cache: dict[str, object] = {}
 
 
 def _get_client_key(endpoint: str | None = None, use_case: str = "default") -> str:
@@ -37,40 +38,58 @@ def _get_client_key(endpoint: str | None = None, use_case: str = "default") -> s
     return f"{base_key}:{use_case}"
 
 
-def _get_cached_vdms_client(use_case: str = "default") -> SimpleVDMSClient:
+def _get_cached_vdms_client(use_case: str = "default"):
     """
-    Get or create a cached VDMS client for the specified use case.
+    Get or create a cached storage client for the specified use case.
+    
+    Returns a SimpleVDMSClient when VECTOR_DB_TYPE="vdms" (default),
+    or an OpenSearchStorageClient when VECTOR_DB_TYPE="opensearch".
+    Both expose the same store_frame_embeddings / store_text_embedding interface.
     
     Args:
         use_case: Type of processing ("video", "text", or "default")
         
     Returns:
-        A SimpleVDMSClient instance
+        A storage client instance (SimpleVDMSClient or OpenSearchStorageClient)
     """
+    vector_db_type = getattr(settings, "VECTOR_DB_TYPE", "vdms").lower()
+
     cache_key = _get_client_key(
         endpoint=settings.MULTIMODAL_EMBEDDING_ENDPOINT,
         use_case=use_case
     )
+    # Prefix with backend type so switching doesn't reuse stale clients
+    cache_key = f"{vector_db_type}:{cache_key}"
     
     if cache_key not in _client_cache:
-        logger.info(f"Creating new VDMS client for use case: {use_case}")
-        
         # Validate that model name is provided when using API mode
         if not settings.MULTIMODAL_EMBEDDING_MODEL_NAME:
             raise ValueError("MULTIMODAL_EMBEDDING_MODEL_NAME must be explicitly provided when using API embedding mode - no default model is allowed")
-        
-        client = SimpleVDMSClient(
-            host=settings.VDMS_VDB_HOST,
-            port=settings.VDMS_VDB_PORT,
-            collection_name=settings.DB_COLLECTION,
-            embedding_dimensions=None,  # Auto-detect from multimodal API
-            multimodal_api_url=settings.MULTIMODAL_EMBEDDING_ENDPOINT,
-            model_name=settings.MULTIMODAL_EMBEDDING_MODEL_NAME  # Must be explicitly set - no default
-        )
+
+        if vector_db_type == "opensearch":
+            from src.core.embedding.opensearch_storage import OpenSearchStorageClient
+            logger.info("Creating OpenSearch storage client for use case: %s", use_case)
+            client = OpenSearchStorageClient(
+                collection_name=settings.DB_COLLECTION,
+                embedding_dimensions=0,   # will be ignored; index created lazily
+                multimodal_api_url=settings.MULTIMODAL_EMBEDDING_ENDPOINT,
+                model_name=settings.MULTIMODAL_EMBEDDING_MODEL_NAME,
+            )
+        else:
+            logger.info(f"Creating new VDMS client for use case: {use_case}")
+            client = SimpleVDMSClient(
+                host=settings.VDMS_VDB_HOST,
+                port=settings.VDMS_VDB_PORT,
+                collection_name=settings.DB_COLLECTION,
+                embedding_dimensions=None,  # Auto-detect from multimodal API
+                multimodal_api_url=settings.MULTIMODAL_EMBEDDING_ENDPOINT,
+                model_name=settings.MULTIMODAL_EMBEDDING_MODEL_NAME
+            )
+
         _client_cache[cache_key] = client
-        logger.debug(f"VDMS client cached with key: {cache_key}")
+        logger.debug(f"Storage client cached with key: {cache_key}")
     else:
-        logger.debug(f"Using cached VDMS client for: {cache_key}")
+        logger.debug(f"Using cached storage client for: {cache_key}")
     
     return _client_cache[cache_key]
 

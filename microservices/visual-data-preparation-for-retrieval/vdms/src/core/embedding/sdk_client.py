@@ -241,7 +241,36 @@ class SDKVDMSClient:
             return 512
     
     def _init_vdms(self):
-        """Initialize VDMS Client and database connection."""
+        """Initialize storage backend (VDMS or OpenSearch) based on VECTOR_DB_TYPE."""
+        vector_db_type = getattr(settings, "VECTOR_DB_TYPE", "vdms").lower()
+
+        if vector_db_type == "opensearch":
+            self._init_opensearch_storage()
+        else:
+            self._init_vdms_storage()
+
+    def _init_opensearch_storage(self):
+        """Initialize OpenSearch as the storage backend for SDK-mode embeddings."""
+        from src.core.embedding.opensearch_storage import OpenSearchStorageClient
+
+        try:
+            logger.info("SDK client: using OpenSearch storage backend")
+            self._os_storage = OpenSearchStorageClient(
+                collection_name=self.collection_name,
+                embedding_dimensions=self.embedding_dimensions,
+            )
+            # Set flags so _store_embeddings knows which path to take
+            self._use_opensearch = True
+            self.video_db = None  # Not used
+            self.vdms_client = None  # Not used
+            logger.info("OpenSearch storage initialized for SDK client")
+        except Exception as ex:
+            logger.error("Error initializing OpenSearch storage: %s", ex)
+            raise Exception(Strings.db_conn_error)
+
+    def _init_vdms_storage(self):
+        """Initialize VDMS as the storage backend (original behaviour)."""
+        self._use_opensearch = False
         try:
             logger.info("Connecting to VDMS server at %s:%s...", self.vdms_host, self.vdms_port)
             
@@ -388,11 +417,17 @@ class SDKVDMSClient:
         texts: List[str],
         metadatas: List[dict],
     ) -> List[str]:
-        """Persist embeddings using the langchain-vdms vector store."""
+        """Persist embeddings using the configured storage backend."""
 
         if not embeddings:
             return []
 
+        # --- OpenSearch path ---
+        if getattr(self, "_use_opensearch", False):
+            logger.info("Storing %d embeddings via OpenSearch", len(embeddings))
+            return self._os_storage._bulk_index(embeddings, texts, metadatas)
+
+        # --- VDMS path (original) ---
         logger.info("Storing %d embeddings via langchain-vdms", len(embeddings))
         batch_size = 200
         generated_ids: List[str] = []
@@ -434,6 +469,13 @@ class SDKVDMSClient:
         self.video_db.check_and_update_properties()
         logger.info("Stored %d embeddings in VDMS", len(generated_ids))
         return generated_ids
+
+    def check_and_update_properties(self):
+        """Refresh storage index after writes."""
+        if getattr(self, "_use_opensearch", False):
+            self._os_storage.check_and_update_properties()
+        elif self.video_db is not None:
+            self.video_db.check_and_update_properties()
     
 
     

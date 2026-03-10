@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     APP_DESC: str = (
         "The Video Search Microservice is designed to handle video search queries and return relevant results."
     )
+    # Vector DB backend selector: "vdms" (default) or "opensearch"
+    VECTOR_DB_TYPE: str = Field(default="vdms", env="VECTOR_DB_TYPE")
+
+    # VDMS settings
     VDMS_VDB_HOST: str = Field(default="vdms-vector-db", env="VDMS_VDB_HOST")
     VDMS_VDB_PORT: int = Field(default=55555, env="VDMS_VDB_PORT")
     EMBEDDINGS_ENDPOINT: str = Field(default="", env="EMBEDDINGS_ENDPOINT")
@@ -48,6 +52,16 @@ class Settings(BaseSettings):
     SEARCH_ENGINE: str = Field(default="FaissFlat", env="SEARCH_ENGINE")
     DISTANCE_STRATEGY: str = Field(default="IP", env="DISTANCE_STRATEGY")
     INDEX_NAME: str = Field(default="videoqna", env="INDEX_NAME")
+
+    # OpenSearch settings (used when VECTOR_DB_TYPE="opensearch")
+    OPENSEARCH_HOST: str = Field(default="localhost", env="OPENSEARCH_HOST")
+    OPENSEARCH_PORT: int = Field(default=9200, env="OPENSEARCH_PORT")
+    OPENSEARCH_INDEX: str = Field(default="", env="OPENSEARCH_INDEX")
+    OPENSEARCH_USER: str = Field(default="", env="OPENSEARCH_USER")
+    OPENSEARCH_PASSWORD: str = Field(default="", env="OPENSEARCH_PASSWORD")
+    OPENSEARCH_USE_SSL: str = Field(default="false", env="OPENSEARCH_USE_SSL")
+    OPENSEARCH_VERIFY_CERTS: str = Field(default="false", env="OPENSEARCH_VERIFY_CERTS")
+    OPENSEARCH_AWS_REGION: str = Field(default="", env="OPENSEARCH_AWS_REGION")
     no_proxy_env: str = Field(default="", env="no_proxy_env")
     http_proxy: str = Field(default="", env="http_proxy")
     https_proxy: str = Field(default="", env="https_proxy")

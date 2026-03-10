@@ -15,7 +15,7 @@ RUN poetry config virtualenvs.create false
 WORKDIR /app
 
 COPY poetry.lock pyproject.toml /app/
-RUN poetry lock && poetry install --no-root
+RUN poetry lock && poetry install --no-root --extras opensearch
 
 COPY . .
 

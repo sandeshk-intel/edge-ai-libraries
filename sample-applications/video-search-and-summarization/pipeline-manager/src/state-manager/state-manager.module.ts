@@ -19,6 +19,7 @@ import { AudioModule } from 'src/audio/audio.module';
 import { SearchModule } from 'src/search/search.module';
 import { FeaturesModule } from 'src/features/features.module';
 import { DataPrepModule } from 'src/data-prep/data-prep.module';
+import { VideoUploadModule } from 'src/video-upload/video-upload.module';
 
 @Module({
   providers: [
@@ -41,6 +42,7 @@ import { DataPrepModule } from 'src/data-prep/data-prep.module';
     FeaturesModule,
     TypeOrmModule.forFeature([StateEntity]),
     DataPrepModule,
+    VideoUploadModule,
   ],
 })
 export class StateManagerModule {}

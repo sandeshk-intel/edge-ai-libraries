@@ -737,7 +737,10 @@ class SimplePipelineManager:
             logger.debug(f"Batch {batch_num}: frames {i} to {min(i + batch_size - 1, total_frames - 1)} ({len(batch_frames)} frames)")
             batches.append((batch_frames, batch_metadata))
         
-        logger.info(f"Created {len(batches)} batches from {total_frames} frames (avg {total_frames/len(batches):.1f} frames/batch)")
+        if batches:
+            logger.info(f"Created {len(batches)} batches from {total_frames} frames (avg {total_frames/len(batches):.1f} frames/batch)")
+        else:
+            logger.info(f"No batches created (0 frames)")
         return batches
     
     def _process_single_batch(
@@ -757,20 +760,77 @@ class SimplePipelineManager:
 
             if not self.supports_image_embeddings:
                 logger.info(
-                    "Embedding model %s does not support image/video embeddings; skipping batch %d",
+                    "Embedding model %s does not support image embeddings; "
+                    "using text-description embeddings for batch %d (%d frames)",
                     self.master_sdk_client.model_id,
                     batch_index,
+                    len(batch_frames),
+                )
+                # --- Text-description path for text-only models ---
+                # Extract frames, build a textual description per frame, embed via text encoder.
+                detection_start = time.time()
+                text_descriptions = []
+                text_metadatas = []
+                for frame_numpy, frame_metadata in zip(batch_frames, batch_metadata):
+                    desc_parts = []
+                    fname = frame_metadata.get('filename', 'unknown')
+                    ts = frame_metadata.get('timestamp')
+                    fnum = frame_metadata.get('frame_number')
+                    if fname:
+                        desc_parts.append(f"Video frame from {fname}")
+                    if ts is not None:
+                        desc_parts.append(f"at {ts:.1f}s")
+                    if fnum is not None:
+                        desc_parts.append(f"frame {fnum}")
+                    tags = frame_metadata.get('tags')
+                    if tags:
+                        desc_parts.append(f"tags: {', '.join(str(t) for t in tags)}")
+                    label = frame_metadata.get('detected_label')
+                    if label:
+                        desc_parts.append(f"detected: {label}")
+                    text_descriptions.append(" ".join(desc_parts) if desc_parts else f"Video frame {fnum}")
+                    text_metadatas.append(frame_metadata)
+                detection_time = time.time() - detection_start
+
+                embedding_start = time.time()
+                embeddings = self.master_sdk_client.generate_embeddings_for_texts(text_descriptions)
+                embedding_time = time.time() - embedding_start
+
+                valid_embeddings = []
+                valid_metadatas = []
+                valid_texts = []
+                for desc, meta, emb in zip(text_descriptions, text_metadatas, embeddings):
+                    if emb is not None:
+                        valid_embeddings.append(emb)
+                        valid_metadatas.append(meta)
+                        valid_texts.append(desc)
+                    else:
+                        logger.warning("Failed to generate text embedding for frame %s", meta.get('frame_id'))
+
+                storage_start = time.time()
+                stored_ids = []
+                if valid_embeddings:
+                    stored_ids = self.master_sdk_client.store_frame_embeddings(
+                        valid_embeddings, valid_metadatas
+                    )
+                storage_time = time.time() - storage_start
+
+                batch_time = time.time() - batch_start_time
+                logger.info(
+                    f"[Batch {batch_index}/{total_batches}] Text-embed path completed: "
+                    f"{len(valid_embeddings)} embeddings "
+                    f"(description: {detection_time:.3f}s, embedding: {embedding_time:.3f}s, "
+                    f"storage: {storage_time:.3f}s, total: {batch_time:.3f}s)"
                 )
                 return {
-                    'status': 'skipped_no_image_support',
-                    'embeddings_count': 0,
-                    'stored_ids': [],
-                    'processing_time': time.time() - batch_start_time,
-                    'detection_time': 0.0,
-                    'embedding_time': 0.0,
-                    'storage_time': 0.0,
-                    'items_after_detection': 0,
-                    'input_frames': len(batch_frames)
+                    'embeddings_count': len(valid_embeddings),
+                    'stored_ids': stored_ids,
+                    'processing_time': batch_time,
+                    'detection_time': detection_time,
+                    'embedding_time': embedding_time,
+                    'storage_time': storage_time,
+                    'items_after_detection': len(batch_frames),
+                    'input_frames': len(batch_frames),
                 }
             
             # Step 1: Process frames with object detection to expand the batch
@@ -944,31 +1004,12 @@ def generate_video_embedding_sdk(
 
         if not sdk_client.supports_image:
             logger.info(
-                "Embedding model %s reports no image/video support; skipping video embedding pipeline",
+                "Embedding model %s reports no image/video support; "
+                "will use text-description embeddings for video frames",
                 sdk_client.model_id,
             )
-            total_time = time.time() - total_start_time
-            return {
-                'status': 'skipped_no_image_support',
-                'stored_ids': [],
-                'total_embeddings': 0,
-                'total_frames_processed': 0,
-                'frame_interval': frame_interval,
-                'timing': {
-                    'frame_extraction_time': 0.0,
-                    'parallel_stage_time': 0.0,
-                    'pipeline_wall_time': total_time,
-                    'avg_batch_time': 0.0,
-                    'max_batch_time': 0.0,
-                    'stage_breakdown': {},
-                },
-                'frame_counts': {
-                    'extracted_frames': 0,
-                    'post_detection_items': 0,
-                    'stored_embeddings': 0,
-                },
-                'processing_mode': 'sdk_simple_pipeline_with_batch_storage',
-            }
+            # Fall through to the normal pipeline — _process_single_batch
+            # will generate text descriptions instead of image embeddings.
         
         # Process video using simple pipeline approach
         result = _process_video_from_memory_simple_pipeline(
@@ -1039,8 +1080,45 @@ def _process_video_from_memory_simple_pipeline(
             
             frames = []
             frames_metadata = []
-            
-            for i, frame_idx in enumerate(frame_indices):
+
+            # For text-only models, bypass decord pixel extraction entirely.
+            # The text-embedding path only uses frame metadata, not pixel data,
+            # so we generate lightweight virtual frames to avoid seek failures.
+            if not sdk_client.supports_image:
+                logger.info(
+                    "Text-only model: generating %d virtual frames "
+                    "(skipping pixel extraction)", len(frame_indices)
+                )
+                for frame_idx in frame_indices:
+                    timestamp = frame_idx / fps if fps and fps > 0 else 0.0
+                    # 1x1 placeholder — text path ignores pixel data
+                    frames.append(np.zeros((1, 1, 3), dtype=np.uint8))
+                    fm = {
+                        'frame_id': f"{metadata_dict.get('video_id', 'unknown')}_{frame_idx}",
+                        'frame_number': frame_idx,
+                        'timestamp': timestamp,
+                        'frame_type': 'full_frame',
+                        'video_id': metadata_dict.get('video_id', 'unknown'),
+                        'filename': metadata_dict.get('filename', 'unknown'),
+                        'bucket_name': metadata_dict.get('bucket_name', 'unknown'),
+                        'tags': metadata_dict.get('tags', []),
+                        'video_url': metadata_dict.get('video_url', ''),
+                        'video_rel_url': metadata_dict.get('video_rel_url', '')
+                    }
+                    if total_frames is not None:
+                        fm['total_frames'] = int(total_frames)
+                    if fps:
+                        fm['fps'] = float(fps)
+                    if video_duration_seconds is not None:
+                        fm['video_duration'] = video_duration_seconds
+                        fm['video_duration_seconds'] = video_duration_seconds
+                    frames_metadata.append(fm)
+                logger.info(
+                    "Generated %d virtual frames for text-description embedding",
+                    len(frames),
+                )
+            else:
+              for i, frame_idx in enumerate(frame_indices):
                 try:
                     # Get frame using decord
                     frame_tensor = vr[frame_idx]
@@ -1118,7 +1196,7 @@ def _process_video_from_memory_simple_pipeline(
                 except Exception as e:
                     logger.error(f"Error extracting frame {frame_idx}: {e}")
                     continue
-            
+
             frame_extraction_time = time.time() - frame_extraction_start
             logger.info(f"Frame extraction completed in {frame_extraction_time:.3f}s: {len(frames)} frames")
             
